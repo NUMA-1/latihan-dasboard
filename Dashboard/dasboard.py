@@ -5,7 +5,7 @@ import seaborn as sns
 import streamlit as st
 
 def create_customer_df(df):
-    customer_df = df[~df['order_status'].isin(['canceled', 'unavailable'])]
+    customer_df = df[df['order_status'].isin(['delivered', 'shipped', 'invoiced', 'processing', 'created'])]
     return customer_df
 
 def create_customer_info(df):
@@ -61,7 +61,7 @@ def create_bar_customer(df):
     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(35, 15))
     sns.barplot(x='customer_id', y='name', data=df.head().sort_values(by='customer_id',ascending=False), ax=ax[0], palette=colors)
     ax[0].set_ylabel(None)
-    ax[0].set_xlabel("Jumlah Pelanggan", fontsize=30)
+    ax[0].set_xlabel("Jumlah Pelanggan", fontsize=30, labelpad=20)
     ax[0].set_title("Kota Pelanggan Terbanyak", loc="center", fontsize=50, pad=30)
     ax[0].tick_params(axis='y', labelsize=35)
     ax[0].tick_params(axis='x', labelsize=30)
@@ -69,7 +69,7 @@ def create_bar_customer(df):
     sns.barplot(x='customer_id', y='name', data=df.head().sort_values(by='customer_id'), ax=ax[1], palette=colors)
     ax[1].invert_xaxis()
     ax[1].set_ylabel(None)
-    ax[1].set_xlabel("Jumlah Pelanggan", fontsize=30)
+    ax[1].set_xlabel("Jumlah Pelanggan", fontsize=30, labelpad=20)
     ax[1].set_title("Kota Pelanggan Terkecil", loc="center", fontsize=50, pad=30)
     ax[1].yaxis.set_label_position("right")
     ax[1].yaxis.tick_right()
@@ -77,22 +77,80 @@ def create_bar_customer(df):
     ax[1].tick_params(axis='x', labelsize=30)
     st.pyplot(fig)
     
-def time_series_payment_df(df):
-    time_payment = df.resample(rule='D', on='order_approved_at').agg({
+def create_daily_revenue_df(df):
+    daily_revenue = df.resample(rule='D', on='order_approved_at').agg({
         'payment_value'  : 'sum'
-    })
-    time_payment = time_payment.reset_index()
-    return time_payment
+    }).reset_index()
+    return daily_revenue
 
-def time_payment_plot(df):
+def daily_revenue_plot(df):
     fig, ax = plt.subplots(figsize=(15, 7))
     ax.plot(df['order_approved_at'], df['payment_value'], linestyle='-', marker='o')
+    ax.set_title("Revenue per Hari", loc="center", pad='20', fontsize='15')
+    plt.ylim(bottom=0)
+    st.pyplot(fig)
+    
+def create_monthly_revenue_df(df):
+    monthly_revenue = df.resample(rule='M', on='order_approved_at').agg({
+        'payment_value' : 'sum'
+    }).reset_index()
+    monthly_revenue['month'] = monthly_revenue['order_approved_at'].dt.strftime('%B')
+    return monthly_revenue
+
+def monthly_revenue_plot(df):
+    fig, ax = plt.subplots(figsize=(15, 7))
+    ax.plot(df['month'], df['payment_value'], linestyle='-', marker='o')
+    ax.set_title("Revenue per Bulanan Tahun 2018", loc="center", pad='20', fontsize='15')
+    ax.ticklabel_format(style='plain', axis='y')
+    plt.ylim(bottom=0)
+    st.pyplot(fig)
+    
+def create_daily_ordered_df(df):
+    filter_order = df[df['order_status']=='delivered']
+    ordered_df = filter_order.resample(rule='D', on='order_approved_at').agg({
+    'order_id' : 'nunique'
+    }).reset_index()
+    return ordered_df
+
+def daily_ordered_plot(df):
+    fig, ax = plt.subplots(figsize=(15, 7))
+    ax.plot(df['order_approved_at'], df['order_id'], linestyle='-', marker='o')
+    ax.set_title('Total Pengiriman yang Berhasil per Hari', loc='center', pad='20', fontsize='15')
+    plt.ylim(bottom=0)
+    st.pyplot(fig)
+    
+def create_monthly_ordered_df(df):
+    monthly_ordered_df = df.resample(rule='M', on='order_approved_at').agg({
+        'order_id' : 'nunique'
+    }).reset_index()
+    monthly_ordered_df['month'] = monthly_ordered_df['order_approved_at'].dt.strftime('%B')
+    return monthly_ordered_df
+    
+def monthly_ordered_plot(df):
+    fig, ax = plt.subplots(figsize=(15,7))
+    ax.plot(df['month'], df['order_id'], linestyle='-', marker='o')
+    ax.set_title('Total Pengiriman yang Berhasil per Bulan', loc='center', pad='20', fontsize='15')
+    plt.ylim(bottom=0)
+    st.pyplot(fig)
+
+def create_type_customer_df(df):
+    type_customer = df['payment_type'].value_counts().reset_index()
+    return type_customer
+
+def create_type_customer_bar(df):
+    colors = ['#A8CD89' if value == df['count'].max() else '#DBD3D3' for value in df['count']]
+
+    fig, ax = plt.subplots(figsize=(15, 7))
+    sns.barplot(x='payment_type', y='count', data=df, palette=colors, ax=ax)
+    ax.set_title('Demografi Pelanggan Berdasarkan Tipe Pembayaran', loc='center', pad=20, fontsize=15)
+    ax.set_xlabel('Jenis Pembayaran', fontsize=14, labelpad=20)
+    ax.set_ylabel('Jumlah Transaksi', fontsize=14, labelpad=20)
     st.pyplot(fig)
 
 # Load dataframe
 all_df = pd.read_csv('Dashboard/main_data.csv')
 geo_json = gpd.read_file('Dashboard/brazil-states.geojson')
-
+  
 month_column = all_df[['order_purchase_timestamp','order_approved_at',
                        'order_delivered_carrier_date','order_delivered_customer_date',
                        'order_estimated_delivery_date']]
@@ -124,7 +182,11 @@ main_df= all_df[(all_df['order_approved_at'] >= str(start_date)) & (all_df['orde
 #set dataframe
 customer_df = create_customer_df(main_df)
 geo_df = create_geo_df(main_df, geo_json)
-payment_df = time_series_payment_df(main_df)
+daily_payment_df = create_daily_revenue_df(customer_df)
+monthly_revenue_df = create_monthly_revenue_df(daily_payment_df)
+daily_ordered_df = create_daily_ordered_df(customer_df)
+monthly_ordered_df = create_monthly_ordered_df(customer_df)
+type_customer_df = create_type_customer_df(main_df)
 
 #title
 st.header("Dicoding Transport")
@@ -148,25 +210,57 @@ with col3:
    
        
 #demografi pelanggan 
-st.subheader('\nDistribusi Pelanggan')  
-col1, col2 = st.columns(2)
+st.subheader('\nDemografi Pelanggan')  
+col1, col2, col3 = st.columns(3)
 with col1:
-    lokasi = st.button('Lokasi')
-
+    pelanggan_provinsi = st.button('Provinsi')
 with col2:
-    bar_plot = st.button('Jumlah')
+    pelanggan_provinsi_bar_plot = st.button('Provinsi (bar)')
+with col3:
+    tipe_pembayaran = st.button('Tipe Pembayaran')
     
-if lokasi:
+    
+if pelanggan_provinsi:
     create_geo_customer(geo_df)
-elif bar_plot:
+elif pelanggan_provinsi_bar_plot:
     create_bar_customer(geo_df)
+elif tipe_pembayaran:
+    create_type_customer_bar(type_customer_df)
 else:   
     create_geo_customer(geo_df)
+    
+#peforma penjualan dan pendapatan
+st.subheader('\nPeforma pendapatan dan pengiriman yang berhasil')
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    penjualan_harian = st.button('Revenue Harian')
+with col2:
+    penjualan_bulanan = st.button('Revenue Bulanan')
+with col3:
+    pengiriman_harian = st.button('Pengiriman Harian')
+with col4:
+    pengiriman_bulanan = st.button('Pengiriman Bulanan')
+    
+if penjualan_harian:
+    st.markdown("### Note:")
+    st.write("Disarankan untuk menginput data dengan rentang waktu yang pendek")
+    daily_revenue_plot(daily_payment_df)
+elif penjualan_bulanan:
+    st.markdown("### Note:")
+    st.write("Disarankan untuk menginput data dengan rentang bulan yang panjang")
+    monthly_revenue_plot(monthly_revenue_df)
+elif pengiriman_harian:
+    st.markdown("### Note:")
+    st.write("Disarankan untuk menginput data dengan rentang waktu yang pendek")
+    daily_ordered_plot(daily_ordered_df)
+elif pengiriman_bulanan:
+    st.markdown("### Note:")
+    st.write("Disarankan untuk menginput data dengan rentang bulan yang panjang")
+    monthly_ordered_plot(monthly_ordered_df)
+else:   
+    st.markdown("### Note:")
+    st.write("Harap pilih salah satu jenis data untuk menampilkan grafik.")
 
-st.subheader('\nPerkembangan Pendapatan Harian')
-st.markdown("### Note:")
-st.write("Rentang yang dipakai harus 30 hari, untuk menghasilkan visualisasi yang bagus")
-time_payment_plot(payment_df)
 
 
 
