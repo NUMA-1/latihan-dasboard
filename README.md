@@ -18,5 +18,5 @@ pip install -r requirements.txt
 
 ## Run steamlit app
 ```
-streamlit run dasboard.py
+streamlit run Dashboard/dasboard.py
 ```
